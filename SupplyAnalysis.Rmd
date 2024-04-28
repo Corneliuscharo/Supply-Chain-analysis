@@ -1,0 +1,254 @@
+---
+title: "Supply Chain"
+output: word_document
+date: "2023-05-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Supply Chain
+
+
+```{r}
+# Load the necessary libraries
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(caret)
+library(forecast)
+library(cluster)
+library(gridExtra)
+library(MASS)
+```
+
+
+#  Data
+```{r}
+# Read the dataset
+dataset <- read.csv("C:/Users/User/Downloads/SCMS_Delivery_History_Dataset_20150929.csv")
+
+
+```
+
+
+#  Data exploration
+```{r}
+# View the structure of the dataset
+str(dataset)
+
+# View the summary statistics of the dataset
+summary(dataset)
+
+# View the first few rows of the dataset
+head(dataset)
+
+# View the dimensions of the dataset
+dim(dataset)
+
+
+```
+
+# Data Cleaning
+```{r}
+# Check for missing values
+sum(is.na(dataset))
+
+# Explore unique values in categorical variables
+unique_values <- sapply(dataset, function(x) length(unique(x)))
+cat_vars <- names(unique_values[unique_values <= 10])
+unique_categories <- lapply(dataset[cat_vars], unique)
+```
+
+
+
+
+#  Data Visualization
+
+```{r}
+library(grid)
+# Plot histograms of numerical variables
+num_vars <- names(dataset)[sapply(dataset, is.numeric)]
+num_plots <- lapply(dataset[num_vars], function(x) hist(x, main = names(x)))
+
+# Plot bar plots of categorical variables
+bar_plots <- lapply(dataset[cat_vars], function(x) barplot(table(x), main = names(x)))
+
+# Explore relationships between variables using scatter plots
+ggplot(dataset, aes(x = Line.Item.Quantity, y = Line.Item.Value, color=dataset$Pack.Price)) +
+  geom_point() +
+  labs(x = "Line Item Quantity", y = "Line Item Value") +
+  ggtitle("Relationship between Line Item Quantity and Line Item Value")
+
+
+
+```
+
+
+```{r}
+# Convert date columns to proper date format
+date_columns <- c("PQ_First_Sent_to_Client_Date", "PO_Sent_to_Vendor_Date", "Scheduled_Delivery_Date", "Delivered_to_Client_Date", "Delivery_Recorded_Date")
+#date_columns <- lapply(dataset[date_columns], dmy)
+
+library(ggplot2)
+# Plot the data
+Unit_Price<-ggplot(dataset, aes(x = dataset$Unit.Price)) +
+  geom_bar(fill = "blue") +
+  labs(x = "Unit Price", y = "Number of Shipments") +
+  ggtitle("Shipments by Unit price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Create a scatter plot of Line Item Quantity vs. Line Item Value
+scatter_plot <- ggplot(dataset, aes(x = Line.Item.Quantity, y = Line.Item.Value)) +
+  geom_point(color = "red") +
+  labs(x = "Line Item Quantity", y = "Line Item Value") +
+  ggtitle("Line Item Quantity vs. Line Item Value")
+
+# Create a histogram of Line Item Value
+histogram <- ggplot(dataset, aes(x = Line.Item.Value)) +
+  geom_histogram(binwidth = 1000, fill = "green", color = "black") +
+  labs(x = "Line Item Value", y = "Frequency") +
+  ggtitle("Distribution of Line Item Value")
+
+# Create a line plot of Line Item Quantity over time
+line_plot <- ggplot(dataset, aes(x = Scheduled.Delivery.Date, y = Line.Item.Quantity)) +
+  geom_line(color = "purple") +
+  labs(x = "Scheduled Delivery Date", y = "Line Item Quantity") +
+  ggtitle("Line Item Quantity over Time") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+grid.arrange(Unit_Price, scatter_plot, histogram,line_plot, nrow = 2)
+```
+
+
+
+
+# Clustering analysis
+```{r}
+# Select the numeric columns for clustering
+numeric_data <- c(dataset$Line.Item.Quantity, dataset$Line.Item.Value)
+numeric_data <- na.omit(numeric_data)
+
+# Perform k-means clustering
+k <- 5  # Number of clusters
+set.seed(123)  # Set seed for reproducibility
+kmeans_result <- kmeans(numeric_data, centers = k)
+
+
+# Assign cluster labels to the original dataset
+cluster <- as.factor(kmeans_result$cluster)
+
+# Plot the clusters
+plot(numeric_data, col = kmeans_result$cluster, pch = 16)
+points(kmeans_result$centers, col = 1:k, pch = 3, xlabs = "Line Item Quantity", ylab = "Line Item Value", color = "Cluster", 
+main = "K-means Clustering (k=5)", cex = 2)
+
+
+
+```
+
+
+# Time Series Analysis
+```{r}
+# Load the required libraries
+library(forecast)
+library(tseries)
+# Select the date and numeric columns for time series analysis
+ts_data <- c(dataset$Delivered.to.Client.Date, dataset$Line.Item.Value)
+
+# Create a time series object
+ts_object <- ts(ts_data, frequency = 12)
+
+# Decompose the time series into trend, seasonal, and random components
+decomposed_ts <- decompose(ts_object)
+
+# Plot the decomposed time series components
+plot(decomposed_ts)
+
+# Perform time series forecasting using an appropriate method (e.g., ARIMA)
+forecast_model <- auto.arima(ts_object)
+forecast_values <- forecast(forecast_model, h = 12)  # Forecast for the next 12 time periods
+
+# Plot the time series forecast
+plot(forecast_values)
+
+# Print the forecasted values
+print(forecast_values)
+
+```
+
+
+
+#  Forecasting
+```{r}
+# Create a time series object
+ts_object <- ts(ts_data, frequency = 12)
+
+# Decompose the time series into trend, seasonal, and random components
+decomposed_ts <- decompose(ts_object)
+
+# Perform time series forecasting using an appropriate method (e.g., ARIMA)
+forecast_model <- auto.arima(ts_object)
+forecast_values <- forecast(forecast_model, h = 12)  # Forecast for the next 12 time periods
+
+# Plot the observed and forecasted values
+plot(forecast_values, main = "Supply Chain Shipment Pricing Data Forecast", xlab = "Date", ylab = "Line_Item_Value", xlim = c(min(time(ts_object)), max(time(ts_object))))
+
+# Add the observed values to the plot
+lines(ts_object, col = "blue")
+
+# Add confidence intervals to the forecasted values
+lines(forecast_values$lower, col = "red", lty = "dashed")
+lines(forecast_values$upper, col = "red", lty = "dashed")
+
+# Add a legend
+legend("topleft", legend = c("Observed", "Forecast", "95% Confidence Interval"), col = c("blue", "black", "red"), lty = c("solid", "solid", "dashed"))
+
+# Print the forecasted values
+print(forecast_values)
+
+```
+
+
+
+
+# Regression
+
+```{r}
+# Load libraries for regression analysis
+library(lmtest)
+library(car)
+
+# Select the relevant columns for regression analysis
+regression_data <- c(dataset$Line.Item.Quantity, dataset$Line.Item.Value, dataset$Weight.in.gms)
+
+# Split the data into training and testing sets
+set.seed(123)
+train_indices <- createDataPartition(regression_data$Line.Item.Value, p = 0.7, list = FALSE)
+train_data <- regression_data[train_indices, ]
+test_data <- regression_data[-train_indices, ]
+
+# Perform regression analysis using linear regression
+lm_model <- lm(Line.Item.Value ~ Line.Item.Quantity + Weight.in.gms, data = train_data)
+
+# Print the summary of the regression model
+summary(lm_model)
+
+# Make predictions using the regression model
+predicted_values <- predict(lm_model, newdata = test_data)
+
+# Calculate the RMSE (Root Mean Squared Error)
+rmse <- sqrt(mean((test_data$Line.Item.Value - predicted_values)^2))
+cat("RMSE:", rmse, "\n")
+
+# Plot the predicted values against the actual values
+plot(test_data$Line.Item.Value, col = "blue", pch = 16, xlab = "Observation", ylab = "Line_Item_Value", main = "Regression Analysis")
+points(predicted_values, col = "red", pch = 16)
+legend("topright", legend = c("Actual", "Predicted"), col = c("blue", "red"), pch = 16)
+
+```
+
+
+
